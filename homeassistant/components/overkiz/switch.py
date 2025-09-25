@@ -15,13 +15,11 @@ from homeassistant.components.switch import (
     SwitchEntity,
     SwitchEntityDescription,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import HomeAssistantOverkizData
-from .const import DOMAIN
+from . import OverkizDataConfigEntry
 from .entity import OverkizDescriptiveEntity
 
 
@@ -111,26 +109,24 @@ SUPPORTED_DEVICES = {
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: OverkizDataConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Overkiz switch from a config entry."""
-    data: HomeAssistantOverkizData = hass.data[DOMAIN][entry.entry_id]
-    entities: list[OverkizSwitch] = []
+    data = entry.runtime_data
 
-    for device in data.platforms[Platform.SWITCH]:
-        if description := SUPPORTED_DEVICES.get(device.widget) or SUPPORTED_DEVICES.get(
-            device.ui_class
-        ):
-            entities.append(
-                OverkizSwitch(
-                    device.device_url,
-                    data.coordinator,
-                    description,
-                )
-            )
-
-    async_add_entities(entities)
+    async_add_entities(
+        OverkizSwitch(
+            device.device_url,
+            data.coordinator,
+            description,
+        )
+        for device in data.platforms[Platform.SWITCH]
+        if (
+            description := SUPPORTED_DEVICES.get(device.widget)
+            or SUPPORTED_DEVICES.get(device.ui_class)
+        )
+    )
 
 
 class OverkizSwitch(OverkizDescriptiveEntity, SwitchEntity):

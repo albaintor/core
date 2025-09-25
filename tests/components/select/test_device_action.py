@@ -47,13 +47,13 @@ async def test_get_actions(
             "entity_id": entity_entry.id,
             "metadata": {"secondary": False},
         }
-        for action in [
+        for action in (
             "select_first",
             "select_last",
             "select_next",
             "select_option",
             "select_previous",
-        ]
+        )
     ]
     actions = await async_get_device_automations(
         hass, DeviceAutomationType.ACTION, device_entry.id
@@ -63,12 +63,12 @@ async def test_get_actions(
 
 @pytest.mark.parametrize(
     ("hidden_by", "entity_category"),
-    (
+    [
         (er.RegistryEntryHider.INTEGRATION, None),
         (er.RegistryEntryHider.USER, None),
         (None, EntityCategory.CONFIG),
         (None, EntityCategory.DIAGNOSTIC),
-    ),
+    ],
 )
 async def test_get_actions_hidden_auxiliary(
     hass: HomeAssistant,
@@ -101,13 +101,13 @@ async def test_get_actions_hidden_auxiliary(
             "entity_id": entity_entry.id,
             "metadata": {"secondary": True},
         }
-        for action in [
+        for action in (
             "select_first",
             "select_last",
             "select_next",
             "select_option",
             "select_previous",
-        ]
+        )
     ]
     actions = await async_get_device_automations(
         hass, DeviceAutomationType.ACTION, device_entry.id
@@ -115,7 +115,7 @@ async def test_get_actions_hidden_auxiliary(
     assert actions == unordered(expected_actions)
 
 
-@pytest.mark.parametrize("action_type", ("select_first", "select_last"))
+@pytest.mark.parametrize("action_type", ["select_first", "select_last"])
 async def test_action_select_first_last(
     hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
@@ -164,7 +164,7 @@ async def test_action_select_first_last(
     assert select_calls[0].data == {"entity_id": entry.entity_id}
 
 
-@pytest.mark.parametrize("action_type", ("select_first", "select_last"))
+@pytest.mark.parametrize("action_type", ["select_first", "select_last"])
 async def test_action_select_first_last_legacy(
     hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
@@ -376,6 +376,7 @@ async def test_get_action_capabilities(
         {
             "name": "cycle",
             "optional": True,
+            "required": False,
             "type": "boolean",
             "default": True,
         },
@@ -391,6 +392,7 @@ async def test_get_action_capabilities(
         {
             "name": "cycle",
             "optional": True,
+            "required": False,
             "type": "boolean",
             "default": True,
         },
@@ -476,6 +478,7 @@ async def test_get_action_capabilities_legacy(
         {
             "name": "cycle",
             "optional": True,
+            "required": False,
             "type": "boolean",
             "default": True,
         },
@@ -491,6 +494,7 @@ async def test_get_action_capabilities_legacy(
         {
             "name": "cycle",
             "optional": True,
+            "required": False,
             "type": "boolean",
             "default": True,
         },

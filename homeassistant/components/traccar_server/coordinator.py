@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from logging import DEBUG as LOG_LEVEL_DEBUG
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from pytraccar import (
@@ -12,17 +13,27 @@ from pytraccar import (
     GeofenceModel,
     PositionModel,
     SubscriptionData,
+    TraccarAuthenticationException,
     TraccarException,
 )
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, EVENTS, LOGGER
-from .helpers import get_device, get_first_geofence
+from .const import (
+    CONF_CUSTOM_ATTRIBUTES,
+    CONF_EVENTS,
+    CONF_MAX_ACCURACY,
+    CONF_SKIP_ACCURACY_FILTER_FOR,
+    DOMAIN,
+    EVENTS,
+    LOGGER,
+)
+from .helpers import get_device, get_first_geofence, get_geofence_ids
 
 
 class TraccarServerCoordinatorDataDevice(TypedDict):
@@ -34,7 +45,7 @@ class TraccarServerCoordinatorDataDevice(TypedDict):
     attributes: dict[str, Any]
 
 
-TraccarServerCoordinatorData = dict[int, TraccarServerCoordinatorDataDevice]
+type TraccarServerCoordinatorData = dict[int, TraccarServerCoordinatorDataDevice]
 
 
 class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorData]):
@@ -45,25 +56,24 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
     def __init__(
         self,
         hass: HomeAssistant,
+        config_entry: ConfigEntry,
         client: ApiClient,
-        *,
-        events: list[str],
-        max_accuracy: float,
-        skip_accuracy_filter_for: list[str],
-        custom_attributes: list[str],
     ) -> None:
         """Initialize global Traccar Server data updater."""
         super().__init__(
             hass=hass,
             logger=LOGGER,
+            config_entry=config_entry,
             name=DOMAIN,
             update_interval=None,
         )
         self.client = client
-        self.custom_attributes = custom_attributes
-        self.events = events
-        self.max_accuracy = max_accuracy
-        self.skip_accuracy_filter_for = skip_accuracy_filter_for
+        self.custom_attributes = config_entry.options.get(CONF_CUSTOM_ATTRIBUTES, [])
+        self.events = config_entry.options.get(CONF_EVENTS, [])
+        self.max_accuracy = config_entry.options.get(CONF_MAX_ACCURACY, 0.0)
+        self.skip_accuracy_filter_for = config_entry.options.get(
+            CONF_SKIP_ACCURACY_FILTER_FOR, []
+        )
         self._geofences: list[GeofenceModel] = []
         self._last_event_import: datetime | None = None
         self._should_log_subscription_error: bool = True
@@ -82,6 +92,8 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
                 self.client.get_positions(),
                 self.client.get_geofences(),
             )
+        except TraccarAuthenticationException:
+            raise ConfigEntryAuthFailed from None
         except TraccarException as ex:
             raise UpdateFailed(f"Error while updating device data: {ex}") from ex
 
@@ -92,8 +104,18 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
 
         self._geofences = geofences
 
+        if self.logger.isEnabledFor(LOG_LEVEL_DEBUG):
+            self.logger.debug("Received devices: %s", devices)
+            self.logger.debug("Received positions: %s", positions)
+
         for position in positions:
-            if (device := get_device(position["deviceId"], devices)) is None:
+            device_id = position["deviceId"]
+            if (device := get_device(device_id, devices)) is None:
+                self.logger.debug(
+                    "Device %s not found for position: %s",
+                    device_id,
+                    position["id"],
+                )
                 continue
 
             if (
@@ -102,13 +124,18 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
                     device, position
                 )
             ) is None:
+                self.logger.debug(
+                    "Skipping position update %s for %s due to accuracy filter",
+                    position["id"],
+                    device_id,
+                )
                 continue
 
-            data[device["id"]] = {
+            data[device_id] = {
                 "device": device,
                 "geofence": get_first_geofence(
                     geofences,
-                    position["geofenceIds"] or [],
+                    get_geofence_ids(device, position),
                 ),
                 "position": position,
                 "attributes": attr,
@@ -122,8 +149,8 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
         self._should_log_subscription_error = True
         update_devices = set()
         for device in data.get("devices") or []:
-            device_id = device["id"]
-            if device_id not in self.data:
+            if (device_id := device["id"]) not in self.data:
+                self.logger.debug("Device %s not found in data", device_id)
                 continue
 
             if (
@@ -139,8 +166,12 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
             update_devices.add(device_id)
 
         for position in data.get("positions") or []:
-            device_id = position["deviceId"]
-            if device_id not in self.data:
+            if (device_id := position["deviceId"]) not in self.data:
+                self.logger.debug(
+                    "Device %s for position %s not found in data",
+                    device_id,
+                    position["id"],
+                )
                 continue
 
             if (
@@ -149,13 +180,18 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
                     self.data[device_id]["device"], position
                 )
             ) is None:
+                self.logger.debug(
+                    "Skipping position update %s for %s due to accuracy filter",
+                    position["id"],
+                    device_id,
+                )
                 continue
 
             self.data[device_id]["position"] = position
             self.data[device_id]["attributes"] = attr
             self.data[device_id]["geofence"] = get_first_geofence(
                 self._geofences,
-                position["geofenceIds"] or [],
+                get_geofence_ids(self.data[device_id]["device"], position),
             )
             update_devices.add(device_id)
 
@@ -204,6 +240,8 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
         """Subscribe to events."""
         try:
             await self.client.subscribe(self.handle_subscription_data)
+        except TraccarAuthenticationException:
+            raise ConfigEntryAuthFailed from None
         except TraccarException as ex:
             if self._should_log_subscription_error:
                 self._should_log_subscription_error = False

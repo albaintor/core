@@ -11,6 +11,7 @@ from homeassistant.components.rest_command import DOMAIN
 from homeassistant.const import (
     CONTENT_TYPE_JSON,
     CONTENT_TYPE_TEXT_PLAIN,
+    HTTP_DIGEST_AUTHENTICATION,
     SERVICE_RELOAD,
 )
 from homeassistant.core import HomeAssistant
@@ -66,11 +67,9 @@ async def test_rest_command_timeout(
 
     aioclient_mock.get(TEST_URL, exc=TimeoutError())
 
-    with pytest.raises(
-        HomeAssistantError,
-        match=r"^Timeout when calling resource 'https://example.com/'$",
-    ):
+    with pytest.raises(HomeAssistantError) as exc:
         await hass.services.async_call(DOMAIN, "get_test", {}, blocking=True)
+    assert str(exc.value) == 'Timeout when calling resource "https://example.com/"'
 
     assert len(aioclient_mock.mock_calls) == 1
 
@@ -85,12 +84,13 @@ async def test_rest_command_aiohttp_error(
 
     aioclient_mock.get(TEST_URL, exc=aiohttp.ClientError())
 
-    with pytest.raises(
-        HomeAssistantError,
-        match=r"^Client error occurred when calling resource 'https://example.com/'$",
-    ):
+    with pytest.raises(HomeAssistantError) as exc:
         await hass.services.async_call(DOMAIN, "get_test", {}, blocking=True)
 
+    assert (
+        str(exc.value)
+        == 'Client error occurred when calling resource "https://example.com/"'
+    )
     assert len(aioclient_mock.mock_calls) == 1
 
 
@@ -124,6 +124,55 @@ async def test_rest_command_auth(
     assert len(aioclient_mock.mock_calls) == 1
 
 
+async def test_rest_command_digest_auth(
+    hass: HomeAssistant,
+    setup_component: ComponentSetup,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """Call a rest command with HTTP digest authentication."""
+    config = {
+        "digest_auth_test": {
+            "url": TEST_URL,
+            "method": "get",
+            "username": "test_user",
+            "password": "test_pass",
+            "authentication": HTTP_DIGEST_AUTHENTICATION,
+        }
+    }
+
+    await setup_component(config)
+
+    # Mock the digest auth behavior - the request will be called with DigestAuthMiddleware
+    with patch("aiohttp.ClientSession.get") as mock_get:
+
+        async def async_iter_chunks(self, chunk_size):
+            yield b"success"
+
+        mock_response = type(
+            "MockResponse",
+            (),
+            {
+                "status": 200,
+                "content_type": "text/plain",
+                "headers": {},
+                "url": TEST_URL,
+                "content": type(
+                    "MockContent", (), {"iter_chunked": async_iter_chunks}
+                )(),
+            },
+        )()
+        mock_get.return_value.__aenter__.return_value = mock_response
+
+        await hass.services.async_call(DOMAIN, "digest_auth_test", {}, blocking=True)
+
+        # Verify that the request was made with DigestAuthMiddleware
+        assert mock_get.called
+        call_kwargs = mock_get.call_args[1]
+        assert "middlewares" in call_kwargs
+        assert len(call_kwargs["middlewares"]) == 1
+        assert isinstance(call_kwargs["middlewares"][0], aiohttp.DigestAuthMiddleware)
+
+
 async def test_rest_command_form_data(
     hass: HomeAssistant,
     setup_component: ComponentSetup,
@@ -155,7 +204,7 @@ async def test_rest_command_methods(
     setup_component: ComponentSetup,
     aioclient_mock: AiohttpClientMocker,
     method: str,
-):
+) -> None:
     """Test various http methods."""
     await setup_component()
 
@@ -216,7 +265,7 @@ async def test_rest_command_headers(
     # provide post request data
     aioclient_mock.post(TEST_URL, content=b"success")
 
-    for test_service in [
+    for test_service in (
         "no_headers_test",
         "content_type_test",
         "headers_test",
@@ -224,7 +273,7 @@ async def test_rest_command_headers(
         "headers_and_content_type_override_test",
         "headers_template_test",
         "headers_and_content_type_override_template_test",
-    ]:
+    ):
         await hass.services.async_call(DOMAIN, test_service, {}, blocking=True)
 
     await hass.async_block_till_done()
@@ -291,6 +340,7 @@ async def test_rest_command_get_response_plaintext(
     assert len(aioclient_mock.mock_calls) == 1
     assert response["content"] == "success"
     assert response["status"] == 200
+    assert response["headers"] == {"content-type": "text/plain"}
 
 
 async def test_rest_command_get_response_json(
@@ -315,6 +365,7 @@ async def test_rest_command_get_response_json(
     assert response["content"]["status"] == "success"
     assert response["content"]["number"] == 42
     assert response["status"] == 200
+    assert response["headers"] == {"content-type": "application/json"}
 
 
 async def test_rest_command_get_response_malformed_json(
@@ -327,7 +378,7 @@ async def test_rest_command_get_response_malformed_json(
 
     aioclient_mock.get(
         TEST_URL,
-        content='{"status": "failure", 42',
+        content=b'{"status": "failure", 42',
         headers={"content-type": "application/json"},
     )
 
@@ -336,13 +387,14 @@ async def test_rest_command_get_response_malformed_json(
     assert not response
 
     # Throws error when requesting response
-    with pytest.raises(
-        HomeAssistantError,
-        match=r"^Response of 'https://example.com/' could not be decoded as JSON$",
-    ):
+    with pytest.raises(HomeAssistantError) as exc:
         await hass.services.async_call(
             DOMAIN, "get_test", {}, blocking=True, return_response=True
         )
+    assert (
+        str(exc.value)
+        == 'The response of "https://example.com/" could not be decoded as JSON'
+    )
 
 
 async def test_rest_command_get_response_none(
@@ -369,12 +421,37 @@ async def test_rest_command_get_response_none(
     assert not response
 
     # Throws Decode error when requesting response
-    with pytest.raises(
-        HomeAssistantError,
-        match=r"^Response of 'https://example.com/' could not be decoded as text$",
-    ):
+    with pytest.raises(HomeAssistantError) as exc:
         response = await hass.services.async_call(
             DOMAIN, "get_test", {}, blocking=True, return_response=True
         )
+    assert (
+        str(exc.value)
+        == 'The response of "https://example.com/" could not be decoded as text'
+    )
 
     assert not response
+
+
+async def test_rest_command_response_iter_chunked(
+    hass: HomeAssistant,
+    setup_component: ComponentSetup,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """Ensure response is consumed when return_response is False."""
+    await setup_component()
+
+    png = base64.decodebytes(
+        b"iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQ"
+        b"UAAAAJcEhZcwAAFiUAABYlAUlSJPAAAAAPSURBVBhXY/h/ku////8AECAE1JZPvDAAAAAASUVORK5CYII="
+    )
+    aioclient_mock.get(TEST_URL, content=png)
+
+    with patch("aiohttp.StreamReader.iter_chunked", autospec=True) as mock_iter_chunked:
+        response = await hass.services.async_call(DOMAIN, "get_test", {}, blocking=True)
+
+        # Ensure the response is not returned
+        assert response is None
+
+        # Verify iter_chunked was called with a chunk size
+        assert mock_iter_chunked.called

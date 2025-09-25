@@ -5,16 +5,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from tololib import ToloClient
-from tololib.errors import ResponseTimedOutError
+from tololib import ToloClient, ToloCommunicationError
 import voluptuous as vol
 
-from homeassistant.components import dhcp
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
-from .const import DEFAULT_NAME, DEFAULT_RETRY_COUNT, DEFAULT_RETRY_TIMEOUT, DOMAIN
+from .const import DEFAULT_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,16 +23,14 @@ class ToloSaunaConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    _discovered_host: str | None = None
+    _discovered_host: str
 
     @staticmethod
     def _check_device_availability(host: str) -> bool:
         client = ToloClient(host)
         try:
-            result = client.get_status_info(
-                resend_timeout=DEFAULT_RETRY_TIMEOUT, retries=DEFAULT_RETRY_COUNT
-            )
-        except ResponseTimedOutError:
+            result = client.get_status()
+        except ToloCommunicationError:
             return False
         return result is not None
 
@@ -64,7 +61,7 @@ class ToloSaunaConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_dhcp(
-        self, discovery_info: dhcp.DhcpServiceInfo
+        self, discovery_info: DhcpServiceInfo
     ) -> ConfigFlowResult:
         """Handle a flow initialized by discovery."""
         await self.async_set_unique_id(format_mac(discovery_info.macaddress))

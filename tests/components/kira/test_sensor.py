@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 from homeassistant.components.kira import sensor as kira
 from homeassistant.core import HomeAssistant
 
+from tests.common import MockEntityPlatform
+
 TEST_CONFIG = {kira.DOMAIN: {"sensors": [{"host": "127.0.0.1", "port": 17324}]}}
 
 DISCOVERY_INFO = {"name": "kira", "device": "kira"}
@@ -14,8 +16,7 @@ DEVICES = []
 
 def add_entities(devices):
     """Mock add devices."""
-    for device in devices:
-        DEVICES.append(device)
+    DEVICES.extend(devices)
 
 
 @patch("homeassistant.components.kira.sensor.KiraReceiver.schedule_update_ha_state")
@@ -30,6 +31,8 @@ def test_kira_sensor_callback(
     kira.setup_platform(hass, TEST_CONFIG, add_entities, DISCOVERY_INFO)
     assert len(DEVICES) == 1
     sensor = DEVICES[0]
+    sensor.hass = hass
+    sensor.platform = MockEntityPlatform(hass)
 
     assert sensor.name == "kira"
 
@@ -40,7 +43,7 @@ def test_kira_sensor_callback(
     codeTuple = (codeName, deviceName)
     sensor._update_callback(codeTuple)
 
-    mock_schedule_update_ha_state.assert_called
+    mock_schedule_update_ha_state.assert_called()
 
     assert sensor.state == codeName
     assert sensor.extra_state_attributes == {kira.CONF_DEVICE: deviceName}

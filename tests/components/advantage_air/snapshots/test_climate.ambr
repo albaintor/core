@@ -30,6 +30,7 @@
         'auto',
       ]),
       'friendly_name': 'myauto',
+      'hvac_action': <HVACAction.COOLING: 'cooling'>,
       'hvac_modes': list([
         <HVACMode.OFF: 'off'>,
         <HVACMode.COOL: 'cool'>,
@@ -54,6 +55,7 @@
     'context': <ANY>,
     'entity_id': 'climate.myauto',
     'last_changed': <ANY>,
+    'last_reported': <ANY>,
     'last_updated': <ANY>,
     'state': 'heat_cool',
   })

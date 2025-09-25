@@ -17,7 +17,7 @@ from homeassistant.components.number import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DOMAIN
 from .coordinator import YoLinkCoordinator
@@ -66,7 +66,7 @@ DEVICE_CONFIG_DESCRIPTIONS: tuple[YoLinkNumberTypeConfigEntityDescription, ...] 
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up device number type config option entity from a config entry."""
     device_coordinators = hass.data[DOMAIN][config_entry.entry_id].device_coordinators
@@ -75,18 +75,16 @@ async def async_setup_entry(
         for device_coordinator in device_coordinators.values()
         if device_coordinator.device.device_type in NUMBER_TYPE_CONF_SUPPORT_DEVICES
     ]
-    entities = []
-    for config_device_coordinator in config_device_coordinators:
-        for description in DEVICE_CONFIG_DESCRIPTIONS:
-            if description.exists_fn(config_device_coordinator.device):
-                entities.append(
-                    YoLinkNumberTypeConfigEntity(
-                        config_entry,
-                        config_device_coordinator,
-                        description,
-                    )
-                )
-    async_add_entities(entities)
+    async_add_entities(
+        YoLinkNumberTypeConfigEntity(
+            config_entry,
+            config_device_coordinator,
+            description,
+        )
+        for config_device_coordinator in config_device_coordinators
+        for description in DEVICE_CONFIG_DESCRIPTIONS
+        if description.exists_fn(config_device_coordinator.device)
+    )
 
 
 class YoLinkNumberTypeConfigEntity(YoLinkEntity, NumberEntity):

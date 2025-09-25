@@ -4,7 +4,7 @@ from unittest.mock import ANY, call
 
 import pytest
 
-import homeassistant.components.mqtt_statestream as statestream
+from homeassistant.components import mqtt_statestream as statestream
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import CoreState, HomeAssistant, State
 from homeassistant.setup import async_setup_component
@@ -100,7 +100,7 @@ async def test_setup_and_stop_waits_for_ha(
 # We use xfail with this test because there is an unhandled exception
 # in a background task in this test.
 # The exception is raised by mqtt.async_publish.
-@pytest.mark.xfail()
+@pytest.mark.xfail
 async def test_startup_no_mqtt(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:

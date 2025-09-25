@@ -19,15 +19,15 @@ from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
-    OptionsFlow,
+    OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import (
     SERVER_SOFTWARE,
     async_get_clientsession,
 )
-import homeassistant.helpers.config_validation as cv
 
 from .const import CLIENT_ID, CONF_REPOSITORIES, DEFAULT_REPOSITORIES, DOMAIN, LOGGER
 
@@ -38,12 +38,12 @@ async def get_repositories(hass: HomeAssistant, access_token: str) -> list[str]:
     repositories = set()
 
     async def _get_starred_repositories() -> None:
-        response = await client.user.starred(**{"params": {"per_page": 100}})
+        response = await client.user.starred(params={"per_page": 100})
         if not response.is_last_page:
             results = await asyncio.gather(
                 *(
                     client.user.starred(
-                        **{"params": {"per_page": 100, "page": page_number}},
+                        params={"per_page": 100, "page": page_number},
                     )
                     for page_number in range(
                         response.next_page_number, response.last_page_number + 1
@@ -56,12 +56,12 @@ async def get_repositories(hass: HomeAssistant, access_token: str) -> list[str]:
         repositories.update(response.data)
 
     async def _get_personal_repositories() -> None:
-        response = await client.user.repos(**{"params": {"per_page": 100}})
+        response = await client.user.repos(params={"per_page": 100})
         if not response.is_last_page:
             results = await asyncio.gather(
                 *(
                     client.user.repos(
-                        **{"params": {"per_page": 100, "page": page_number}},
+                        params={"per_page": 100, "page": page_number},
                     )
                     for page_number in range(
                         response.next_page_number, response.last_page_number + 1
@@ -137,7 +137,7 @@ class GitHubConfigFlow(ConfigFlow, domain=DOMAIN):
             self._device = GitHubDeviceAPI(
                 client_id=CLIENT_ID,
                 session=async_get_clientsession(self.hass),
-                **{"client_name": SERVER_SOFTWARE},
+                client_name=SERVER_SOFTWARE,
             )
 
             try:
@@ -211,15 +211,11 @@ class GitHubConfigFlow(ConfigFlow, domain=DOMAIN):
         config_entry: ConfigEntry,
     ) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
 
-class OptionsFlowHandler(OptionsFlow):
+class OptionsFlowHandler(OptionsFlowWithReload):
     """Handle a option flow for GitHub."""
-
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self,

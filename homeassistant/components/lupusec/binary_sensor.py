@@ -12,11 +12,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import DOMAIN
+from . import LupusecConfigEntry
 from .entity import LupusecBaseSensor
 
 SCAN_INTERVAL = timedelta(seconds=2)
@@ -26,22 +25,21 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: LupusecConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up a binary sensors for a Lupusec device."""
 
-    data = hass.data[DOMAIN][config_entry.entry_id]
+    data = config_entry.runtime_data
 
     device_types = CONST.TYPE_OPENING + CONST.TYPE_SENSOR
 
-    sensors = []
     partial_func = partial(data.get_devices, generic_type=device_types)
     devices = await hass.async_add_executor_job(partial_func)
-    for device in devices:
-        sensors.append(LupusecBinarySensor(device, config_entry.entry_id))
 
-    async_add_entities(sensors)
+    async_add_entities(
+        LupusecBinarySensor(device, config_entry.entry_id) for device in devices
+    )
 
 
 class LupusecBinarySensor(LupusecBaseSensor, BinarySensorEntity):

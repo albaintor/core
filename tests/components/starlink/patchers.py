@@ -19,6 +19,16 @@ LOCATION_DATA_SUCCESS_PATCHER = patch(
     return_value=json.loads(load_fixture("location_data_success.json", "starlink")),
 )
 
+SLEEP_DATA_SUCCESS_PATCHER = patch(
+    "homeassistant.components.starlink.coordinator.get_sleep_config",
+    return_value=json.loads(load_fixture("sleep_data_success.json", "starlink")),
+)
+
+HISTORY_STATS_SUCCESS_PATCHER = patch(
+    "homeassistant.components.starlink.coordinator.history_stats",
+    return_value=json.loads(load_fixture("history_stats_success.json", "starlink")),
+)
+
 DEVICE_FOUND_PATCHER = patch(
     "homeassistant.components.starlink.config_flow.get_id", return_value="some-valid-id"
 )

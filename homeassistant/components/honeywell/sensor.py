@@ -14,14 +14,13 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
-from . import HoneywellData
+from . import HoneywellConfigEntry
 from .const import DOMAIN
 
 OUTDOOR_TEMPERATURE_STATUS_KEY = "outdoor_temperature"
@@ -81,19 +80,18 @@ SENSOR_TYPES: tuple[HoneywellSensorEntityDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: HoneywellConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Honeywell thermostat."""
-    data: HoneywellData = hass.data[DOMAIN][config_entry.entry_id]
-    sensors = []
+    data = config_entry.runtime_data
 
-    for device in data.devices.values():
-        for description in SENSOR_TYPES:
-            if getattr(device, description.key) is not None:
-                sensors.append(HoneywellSensor(device, description))
-
-    async_add_entities(sensors)
+    async_add_entities(
+        HoneywellSensor(device, description)
+        for device in data.devices.values()
+        for description in SENSOR_TYPES
+        if getattr(device, description.key) is not None
+    )
 
 
 class HoneywellSensor(SensorEntity):

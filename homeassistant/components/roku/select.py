@@ -9,14 +9,14 @@ from rokuecp import Roku
 from rokuecp.models import Device as RokuDevice
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import RokuDataUpdateCoordinator
+from .coordinator import RokuConfigEntry
 from .entity import RokuEntity
 from .helpers import format_channel_name, roku_exception_handler
+
+PARALLEL_UPDATES = 1
 
 
 def _get_application_name(device: RokuDevice) -> str | None:
@@ -30,7 +30,7 @@ def _get_application_name(device: RokuDevice) -> str | None:
 
 
 def _get_applications(device: RokuDevice) -> list[str]:
-    return ["Home"] + sorted(app.name for app in device.apps if app.name is not None)
+    return ["Home", *sorted(app.name for app in device.apps if app.name is not None)]
 
 
 def _get_channel_name(device: RokuDevice) -> str | None:
@@ -90,7 +90,6 @@ ENTITIES: tuple[RokuSelectEntityDescription, ...] = (
     RokuSelectEntityDescription(
         key="application",
         translation_key="application",
-        icon="mdi:application",
         set_fn=_launch_application,
         value_fn=_get_application_name,
         options_fn=_get_applications,
@@ -101,7 +100,6 @@ ENTITIES: tuple[RokuSelectEntityDescription, ...] = (
 CHANNEL_ENTITY = RokuSelectEntityDescription(
     key="channel",
     translation_key="channel",
-    icon="mdi:television",
     set_fn=_tune_channel,
     value_fn=_get_channel_name,
     options_fn=_get_channels,
@@ -110,27 +108,24 @@ CHANNEL_ENTITY = RokuSelectEntityDescription(
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: RokuConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Roku select based on a config entry."""
-    coordinator: RokuDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-    device: RokuDevice = coordinator.data
+    device: RokuDevice = entry.runtime_data.data
 
-    entities: list[RokuSelectEntity] = []
-
-    for description in ENTITIES:
-        entities.append(
-            RokuSelectEntity(
-                coordinator=coordinator,
-                description=description,
-            )
+    entities: list[RokuSelectEntity] = [
+        RokuSelectEntity(
+            coordinator=entry.runtime_data,
+            description=description,
         )
+        for description in ENTITIES
+    ]
 
     if len(device.channels) > 0:
         entities.append(
             RokuSelectEntity(
-                coordinator=coordinator,
+                coordinator=entry.runtime_data,
                 description=CHANNEL_ENTITY,
             )
         )

@@ -14,17 +14,16 @@ from homeassistant.components.media_player import (
     MediaPlayerState,
     MediaType,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+from . import DirecTVConfigEntry
 from .const import (
     ATTR_MEDIA_CURRENTLY_RECORDING,
     ATTR_MEDIA_RATING,
     ATTR_MEDIA_RECORDED,
     ATTR_MEDIA_START_TIME,
-    DOMAIN,
 )
 from .entity import DIRECTVEntity
 
@@ -55,11 +54,11 @@ SUPPORT_DTV_CLIENT = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: DirecTVConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the DirecTV config entry."""
-    dtv = hass.data[DOMAIN][entry.entry_id]
+    dtv = entry.runtime_data
 
     async_add_entities(
         (
@@ -278,7 +277,7 @@ class DIRECTVMediaPlayer(DIRECTVEntity, MediaPlayerEntity):
     async def async_turn_on(self) -> None:
         """Turn on the receiver."""
         if self._is_client:
-            raise NotImplementedError()
+            raise NotImplementedError
 
         _LOGGER.debug("Turn on %s", self.name)
         await self.dtv.remote("poweron", self._address)
@@ -286,7 +285,7 @@ class DIRECTVMediaPlayer(DIRECTVEntity, MediaPlayerEntity):
     async def async_turn_off(self) -> None:
         """Turn off the receiver."""
         if self._is_client:
-            raise NotImplementedError()
+            raise NotImplementedError
 
         _LOGGER.debug("Turn off %s", self.name)
         await self.dtv.remote("poweroff", self._address)

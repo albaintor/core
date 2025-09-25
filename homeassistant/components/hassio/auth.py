@@ -14,7 +14,7 @@ from homeassistant.auth.providers import homeassistant as auth_ha
 from homeassistant.components.http import KEY_HASS, KEY_HASS_USER, HomeAssistantView
 from homeassistant.components.http.data_validator import RequestDataValidator
 from homeassistant.core import HomeAssistant, callback
-import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import config_validation as cv
 
 from .const import ATTR_ADDON, ATTR_PASSWORD, ATTR_USERNAME
 
@@ -48,12 +48,12 @@ class HassIOBaseAuth(HomeAssistantView):
             hassio_ip
         ):
             _LOGGER.error("Invalid auth request from %s", request.remote)
-            raise HTTPUnauthorized()
+            raise HTTPUnauthorized
 
         # Check caller token
         if request[KEY_HASS_USER].id != self.user.id:
             _LOGGER.error("Invalid auth request from %s", request[KEY_HASS_USER].name)
-            raise HTTPUnauthorized()
+            raise HTTPUnauthorized
 
 
 class HassIOAuth(HassIOBaseAuth):
@@ -82,7 +82,7 @@ class HassIOAuth(HassIOBaseAuth):
                 data[ATTR_USERNAME], data[ATTR_PASSWORD]
             )
         except auth_ha.InvalidAuth:
-            raise HTTPNotFound() from None
+            raise HTTPNotFound from None
 
         return web.Response(status=HTTPStatus.OK)
 
@@ -112,6 +112,6 @@ class HassIOPasswordReset(HassIOBaseAuth):
                 data[ATTR_USERNAME], data[ATTR_PASSWORD]
             )
         except auth_ha.InvalidUser as err:
-            raise HTTPNotFound() from err
+            raise HTTPNotFound from err
 
         return web.Response(status=HTTPStatus.OK)

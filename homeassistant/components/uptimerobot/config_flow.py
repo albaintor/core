@@ -36,7 +36,7 @@ class UptimeRobotConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         response: UptimeRobotApiResponse | UptimeRobotApiError | None = None
         key: str = data[CONF_API_KEY]
-        if key.startswith("ur") or key.startswith("m"):
+        if key.startswith(("ur", "m")):
             LOGGER.error("Wrong API key type detected, use the 'main' API key")
             errors["base"] = "not_main_key"
             return errors, None
@@ -44,13 +44,11 @@ class UptimeRobotConfigFlow(ConfigFlow, domain=DOMAIN):
 
         try:
             response = await uptime_robot_api.async_get_account_details()
-        except UptimeRobotAuthenticationException as exception:
-            LOGGER.error(exception)
+        except UptimeRobotAuthenticationException:
             errors["base"] = "invalid_api_key"
-        except UptimeRobotException as exception:
-            LOGGER.error(exception)
+        except UptimeRobotException:
             errors["base"] = "cannot_connect"
-        except Exception as exception:  # pylint: disable=broad-except
+        except Exception as exception:  # noqa: BLE001
             LOGGER.exception(exception)
             errors["base"] = "unknown"
         else:
